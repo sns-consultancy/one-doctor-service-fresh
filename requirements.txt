@@ -1,0 +1,7 @@
+flask 
+flask-cors 
+firebase-admin 
+requests
+dotenv
+gunicorn
+flask-jwt-extended

@@ -1,0 +1,42 @@
+# Byte-compiled / cached files
+__pycache__/
+*.py[cod]
+*.swp
+*.swo
+*.DS_Store
+
+# Virtual environment
+venv/
+.env
+
+# Logs and local databases
+*.log
+*.sqlite3
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Python Package files
+*.egg-info/
+dist/
+build/
+
+# PyTest cache
+.pytest_cache/
+
+# IDE & Editor specific files
+.vscode/
+.idea/
+*.code-workspace
+
+# AWS credentials & config (if applicable)
+.aws/
+
+# Firebase config (if applicable)
+firebase.json
+serviceAccountKey.json
+onedoctorapp-e7c8c-firebase-adminsdk-fbsvc-1769df2409.json
+.env
+ServiceAccountKey.json
+service-account-base64.txt
+firebase_key.json

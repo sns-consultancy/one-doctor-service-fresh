@@ -1,0 +1,45 @@
+# .github/workflows/ci.yml
+
+name: CI/CD Pipeline
+
+on:
+  # push:
+  #   branches: [ feature* ]
+  pull_request:
+    branches: [ master, develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 🔄 Checkout code
+      uses: actions/checkout@v3
+
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'  # Choose your Python version
+
+    - name: 📦 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: ✅ Run tests
+      run: |
+        python -m unittest discover
+      env:
+        FLASK_ENV: testing
+        HEALTH_API_KEY: test_api_key
+        FIREBASE_CREDENTIALS_BASE64: ${{ secrets.FIREBASE_CREDENTIALS_BASE64 }}
+
+    - name: 🚀 Deploy to Heroku
+      env:
+        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+      run: |
+        git fetch --prune --unshallow || true
+        if ! git remote | grep heroku; then
+        git remote add heroku https://heroku:${HEROKU_API_KEY}@git.heroku.com/one-doctor-service.git
+        fi
+        git push heroku HEAD:refs/heads/master -f
