@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # One-Doctor-Service
 
 A modular Flask backend API for securely storing and retrieving health data using Firebase Firestore.
@@ -159,3 +160,7 @@ waitress-serve --port=8000 app:create_app
 ## License
 
 sns-consultancy
+=======
+# one-doctor-service-fresh
+One Doctor Python Backend
+>>>>>>> 5b692e3df8f4c50b4ac35f0627bb0179abfc3e2c
