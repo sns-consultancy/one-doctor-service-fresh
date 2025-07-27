@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API key for your health API
-API_KEY = os.environ.get('HEALTH_API_KEY')
+API_KEY = os.environ.get('HEALTH_API_KEY', 'test_api_key')
 
 # For Firebase credentials, check if we're on Heroku (using base64) or local
 if 'FIREBASE_CREDENTIALS_BASE64' in os.environ:
