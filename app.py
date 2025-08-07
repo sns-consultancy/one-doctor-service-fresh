@@ -13,6 +13,7 @@ from flask_jwt_extended import JWTManager
 from src.api.health import health_bp
 from src.api.authentication import authentication_bp
 from src.api.heart_disease_ml import heart_ml_bp
+from src.api.medical_records import medical_records_bp
 from src.db import db  # Firestore client
 
 # Configure logging
@@ -39,6 +40,7 @@ def create_app():
         app.register_blueprint(health_bp, url_prefix="/api")
         app.register_blueprint(authentication_bp, url_prefix="/api/auth")
         app.register_blueprint(heart_ml_bp, url_prefix="/api")
+        app.register_blueprint(medical_records_bp, url_prefix="/api")
 
         # Default home route
         @app.route("/")
