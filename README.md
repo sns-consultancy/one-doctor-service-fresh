@@ -11,6 +11,19 @@ The repository is split into separate areas for the Python backend and the JavaS
 
 Keeping the frontend in its own directory prevents Heroku from treating the project as a Node application so the Python backend can run without additional configuration.
 
+## Authentication roles
+
+The `/api/auth` endpoints now support multiple user roles. When signing up you can specify a role of `patient`, `doctor`, or `hospital`:
+
+```bash
+curl -X POST /api/auth/signup -H "Content-Type: application/json" \\
+     -d '{"username": "doc1", "email": "d@example.com", "password": "secret", "role": "doctor"}'
+```
+
+Login responses include the stored role and a `/api/auth/switch-role` endpoint lets an existing account change roles.
+
+Medication records accept optional `entered_by` and `entered_by_role` fields so providers can log who created a record.
+
 ## Wearable Integrations
 
 New modules under `src/integrations` provide basic clients for different devices. Currently the Fitbit client includes a simple implementation using the public Fitbit API. Apple Watch and Google Fit clients are provided as placeholders for future expansion.

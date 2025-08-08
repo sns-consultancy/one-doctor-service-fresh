@@ -14,9 +14,13 @@ def signup():
     username = data.get("username")
     email = data.get("email")
     password = data.get("password")
+    role = data.get("role", "patient")
 
     if not username or not email or not password:
         return jsonify({"error": "Missing required fields"}), 400
+
+    if role not in {"patient", "doctor", "hospital"}:
+        return jsonify({"error": "Invalid role"}), 400
 
     # Hash the password
     hashed_password = generate_password_hash(password)
@@ -26,10 +30,14 @@ def signup():
     user_ref.set({
         "username": username,
         "email": email,
-        "password": hashed_password
+        "password": hashed_password,
+        "role": role,
     })
 
-    return jsonify({"message": "User created successfully", "status": "success"}), 201
+    return (
+        jsonify({"message": "User created successfully", "status": "success", "role": role}),
+        201,
+    )
 
 
 @authentication_bp.route("/login", methods=["POST"])
@@ -65,4 +73,29 @@ def login():
         return jsonify({"error": "Invalid credentials"}), 401
 
     print("Password check passed")
-    return jsonify({"message": "Login successful", "status": "success"}), 200
+    return (
+        jsonify({
+            "message": "Login successful",
+            "status": "success",
+            "role": user_data.get("role", "patient"),
+        }),
+        200,
+    )
+
+
+@authentication_bp.route("/switch-role", methods=["POST"])
+def switch_role():
+    data = request.json or {}
+    username = data.get("username")
+    role = data.get("role")
+
+    if not username or role not in {"patient", "doctor", "hospital"}:
+        return jsonify({"error": "Invalid request"}), 400
+
+    user_ref = db.collection("users").document(username)
+    user_doc = user_ref.get()
+    if not user_doc.exists:
+        return jsonify({"error": "User not found"}), 404
+
+    user_ref.update({"role": role})
+    return jsonify({"message": "Role updated", "status": "success", "role": role}), 200

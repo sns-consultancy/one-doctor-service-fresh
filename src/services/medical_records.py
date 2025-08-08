@@ -29,6 +29,8 @@ class MedicalRecordService:
             "age": data["age"],
             "medication": data.get("medication"),
             "notes": data.get("notes", ""),
+            "entered_by": data.get("entered_by"),
+            "entered_by_role": data.get("entered_by_role", "patient"),
             "category": self.categorize_age(data["age"]),
             "date": datetime.utcnow().isoformat(),
         }
