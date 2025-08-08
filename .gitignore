@@ -40,3 +40,10 @@ onedoctorapp-e7c8c-firebase-adminsdk-fbsvc-1769df2409.json
 ServiceAccountKey.json
 service-account-base64.txt
 firebase_key.json
+
+# Node dependencies
+node_modules/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/package-lock.json
