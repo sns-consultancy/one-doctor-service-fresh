@@ -4,7 +4,8 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   stripeCustomerId: { type: String },
   subscriptionStatus: { type: String },
-  // Add fields as needed
+  subscriptionPlan: { type: String },
+  // Add more fields as needed
 });
 
 module.exports = mongoose.model("User", UserSchema);
