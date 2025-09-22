@@ -147,3 +147,18 @@ path_candidates = [
     "/etc/secrets/firebase.json",   # <— add this line (Render Secret File)
     "firebase_key.json",            # local-only fallback
 ]
+# existing helpers
+def get_app():
+    if not firebase_admin._apps:
+        _init_firebase_if_needed()
+    return list(firebase_admin._apps.values())[0]
+
+def get_db():
+    global _db_client
+    if _db_client is None:
+        _init_firebase_if_needed()
+    return _db_client
+
+# --- add this so "from src.db import db" works ---
+db = get_db()           # <-- exported name
+__all__ = ["get_app", "get_db", "db"]
