@@ -1,89 +1,149 @@
-import os
-import sys
-import json
-import base64
-import logging
+# db.py
+import os, sys, json, base64, tempfile, logging
+from typing import Optional
+
+from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# -----------------------------------------------------------------------------
+# Env & Logging
+# -----------------------------------------------------------------------------
+load_dotenv()  # safe even if no .env present
 
-# Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stdout
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    stream=sys.stdout,
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("firebase-init")
 
-# Check if we're in testing mode
-is_testing = os.environ.get('FLASK_ENV') == 'testing'
+IS_TESTING = os.getenv("FLASK_ENV") == "testing"
+IS_DEVLIKE = os.getenv("FLASK_ENV") in {"development", "debug"} or os.getenv("DEBUG") == "True"
 
-if is_testing:
-    logger.info("Test environment detected, using mock Firebase")
-    from unittest.mock import MagicMock
+# -----------------------------------------------------------------------------
+# Credential Resolution (priority order)
+# -----------------------------------------------------------------------------
+def _resolve_credentials() -> credentials.Certificate:
+    """
+    Returns a firebase_admin.credentials.Certificate based on the first
+    available source (highest priority first).
 
-    if not firebase_admin._apps:
-        firebase_admin._apps = {'[DEFAULT]': MagicMock()}
+    Priority:
+      1) FIREBASE_CREDENTIALS_JSON        -> raw JSON string
+      2) FIREBASE_CREDENTIALS_BASE64      -> base64 of the JSON
+      3) FIREBASE_CREDENTIALS / FIREBASE_CREDENTIALS_PATH / FIRESTORE_SERVICE_ACCOUNT / GOOGLE_APPLICATION_CREDENTIALS -> file path
+    """
+    # 1) JSON text in env
+    raw_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
+    if raw_json:
+        logger.info("Using FIREBASE_CREDENTIALS_JSON")
+        try:
+            return credentials.Certificate(json.loads(raw_json))
+        except Exception as e:
+            logger.error(f"Invalid FIREBASE_CREDENTIALS_JSON: {e}")
+            raise
 
-    db = MagicMock()
+    # 2) Base64-encoded JSON in env
+    b64 = os.getenv("FIREBASE_CREDENTIALS_BASE64") or os.getenv("FIREBASE_CREDENTIALS_B64")
+    if b64:
+        logger.info("Using FIREBASE_CREDENTIALS_BASE64")
+        try:
+            decoded = base64.b64decode(b64)
+            # firebase_admin can take a dict, but we'll write a temp file for clarity
+            data = json.loads(decoded.decode("utf-8"))
+            return credentials.Certificate(data)
+        except Exception as e:
+            logger.error(f"Invalid FIREBASE_CREDENTIALS_BASE64: {e}")
+            raise
 
-else:
-    try:
-        cred = None
+    # 3) File path variants
+    path_candidates = [
+        os.getenv("FIREBASE_CREDENTIALS"),
+        os.getenv("FIREBASE_CREDENTIALS_PATH"),
+        os.getenv("FIRESTORE_SERVICE_ACCOUNT"),
+        os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+        "firebase_key.json",  # final fallback if you keep the file in repo
+    ]
+    for p in path_candidates:
+        if p and os.path.exists(p):
+            logger.info(f"Using Firebase credentials file: {p}")
+            return credentials.Certificate(p)
 
-        # Priority 1: FIREBASE_CREDENTIALS_BASE64
-        if 'FIREBASE_CREDENTIALS_BASE64' in os.environ:
-            logger.info("Found FIREBASE_CREDENTIALS_BASE64 environment variable")
-            encoded = os.environ.get('FIREBASE_CREDENTIALS_BASE64')
-            decoded = base64.b64decode(encoded).decode('utf-8')
-            cred_dict = json.loads(decoded)
-            cred = credentials.Certificate(cred_dict)
-            logger.info("Successfully loaded Firebase credentials from base64")
+    # None found
+    raise FileNotFoundError(
+        "Firebase credentials not provided. Supply one of:\n"
+        "- FIREBASE_CREDENTIALS_JSON (raw JSON)\n"
+        "- FIREBASE_CREDENTIALS_BASE64 (base64 JSON)\n"
+        "- FIREBASE_CREDENTIALS / FIREBASE_CREDENTIALS_PATH / FIRESTORE_SERVICE_ACCOUNT / GOOGLE_APPLICATION_CREDENTIALS (file path)"
+    )
 
-        # Priority 2: FIREBASE_CREDENTIALS
-        elif 'FIREBASE_CREDENTIALS' in os.environ:
-            logger.info("Found FIREBASE_CREDENTIALS environment variable")
-            cred_path = os.environ.get('FIREBASE_CREDENTIALS')
-            if os.path.exists(cred_path):
-                cred = credentials.Certificate(cred_path)
-            else:
-                logger.error(f"Firebase credentials file not found: {cred_path}")
-                raise FileNotFoundError(f"Firebase credentials file not found: {cred_path}")
+# -----------------------------------------------------------------------------
+# Initialization
+# -----------------------------------------------------------------------------
+_db_client: Optional[firestore.Client] = None
 
-        # Priority 3: FIRESTORE_SERVICE_ACCOUNT
-        elif 'FIRESTORE_SERVICE_ACCOUNT' in os.environ:
-            path = os.environ.get('FIRESTORE_SERVICE_ACCOUNT')
-            logger.info(f"Using Firebase credentials file: {path}")
-            if os.path.exists(path):
-                cred = credentials.Certificate(path)
-            else:
-                logger.error(f"Firebase credentials file not found: {path}")
-                raise FileNotFoundError(f"Firebase credentials file not found: {path}")
+def _init_firebase_if_needed():
+    global _db_client
 
-        # No credentials found
-        else:
-            logger.error("No Firebase credentials found in environment variables")
-            raise ValueError("No Firebase credentials found")
-
-        # Initialize Firebase
+    # Testing: provide a mock so unit tests run without real Firebase
+    if IS_TESTING:
+        logger.info("FLASK_ENV=testing detected; using mock Firebase app & DB.")
+        from unittest.mock import MagicMock
         if not firebase_admin._apps:
-            firebase_admin.initialize_app(cred)
+            firebase_admin._apps = {"[DEFAULT]": MagicMock()}
+        _db_client = MagicMock()
+        return
 
-        db = firestore.client()
-        logger.info("Firebase initialized successfully")
+    try:
+        if not firebase_admin._apps:
+            cred = _resolve_credentials()
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase initialized successfully.")
+        else:
+            logger.debug("Firebase already initialized; reusing existing app.")
+
+        # Create Firestore client
+        _db_client = firestore.client()
+        logger.info("Firestore client ready.")
 
     except Exception as e:
-        logger.error(f"Failed to initialize Firebase: {str(e)}")
-        if os.environ.get('FLASK_ENV') in ('development', 'debug') or os.environ.get('DEBUG') == 'True':
+        logger.error(f"Failed to initialize Firebase: {e}")
+        if IS_DEVLIKE:
+            logger.warning("Dev/Debug environment detected; falling back to mock DB.")
             from unittest.mock import MagicMock
-
             if not firebase_admin._apps:
-                firebase_admin._apps = {'[DEFAULT]': MagicMock()}
-
-            db = MagicMock()
-            logger.warning("Using mock database due to initialization failure")
+                firebase_admin._apps = {"[DEFAULT]": MagicMock()}
+            _db_client = MagicMock()
         else:
+            # In prod, bubble up
             raise
+
+# Run init on import
+_init_firebase_if_needed()
+
+# -----------------------------------------------------------------------------
+# Public helpers
+# -----------------------------------------------------------------------------
+def get_app():
+    """Return the firebase_admin app (mock in tests/dev fallback)."""
+    if not firebase_admin._apps:
+        _init_firebase_if_needed()
+    # Return the first (default) app object
+    return list(firebase_admin._apps.values())[0]
+
+def get_db():
+    """Return a Firestore client (or mock in testing/dev fallback)."""
+    global _db_client
+    if _db_client is None:
+        _init_firebase_if_needed()
+    return _db_client
+# 3) File path variants
+path_candidates = [
+    os.getenv("FIREBASE_CREDENTIALS"),
+    os.getenv("FIREBASE_CREDENTIALS_PATH"),
+    os.getenv("FIRESTORE_SERVICE_ACCOUNT"),
+    os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+    "/etc/secrets/firebase.json",   # <— add this line (Render Secret File)
+    "firebase_key.json",            # local-only fallback
+]
